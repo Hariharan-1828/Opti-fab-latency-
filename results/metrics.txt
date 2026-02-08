@@ -1,0 +1,14 @@
+              precision    recall  f1-score   support
+
+       clean       0.95      1.00      0.98        20
+       crack       0.95      1.00      0.98        20
+ edge_defect       0.67      1.00      0.80        20
+        open       1.00      1.00      1.00        15
+       other       1.00      0.50      0.67        20
+     scratch       0.87      1.00      0.93        20
+       short       1.00      1.00      1.00        15
+        spot       1.00      0.75      0.86        20
+
+    accuracy                           0.90       150
+   macro avg       0.93      0.91      0.90       150
+weighted avg       0.93      0.90      0.89       150
