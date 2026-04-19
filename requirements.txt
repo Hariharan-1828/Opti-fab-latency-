@@ -1,7 +1,24 @@
-tensorflow
-opencv-python
-numpy
-matplotlib
-scikit-learn
-onnx
-tf2onnx
+# OPTI-FAB dependencies
+# Pinned versions — resolves the protobuf / TensorFlow compatibility error
+
+# Core ML
+tensorflow==2.12.0
+protobuf==3.20.3          # CRITICAL: >=4.x breaks TF 2.x (see tf_error.txt)
+keras==2.12.0
+
+# Export
+tf2onnx==1.14.0
+onnx==1.14.0
+onnxruntime==1.15.1       # CPU inference / validation
+
+# Data & evaluation
+numpy==1.23.5
+scikit-learn==1.2.2
+matplotlib==3.7.1
+Pillow==9.5.0
+opencv-python==4.7.0.72
+scipy==1.10.1
+
+# Optional: TensorRT (NVIDIA GPU only)
+# Install separately via: pip install tensorrt
+# See docs/tensorrt_setup.md for full instructions

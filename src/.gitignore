@@ -1,0 +1,46 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Virtual environments
+venv/
+env/
+.venv/
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb
+
+# Models (large files — use Git LFS or link separately)
+models/*.keras
+models/*.h5
+models/*.onnx
+models/*.trt
+models/*.engine
+
+# Logs
+logs/
+
+# Results (regenerate with evaluate.py)
+results/
+
+# Dataset (too large for git — document download separately)
+dataset/train/
+dataset/validation/
+dataset/test/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp

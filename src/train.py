@@ -1,4 +1,8 @@
-import os
+"""
+OPTI-FAB — Model Training
+MobileNetV2 backbone, grayscale input, 8-class defect classifier.
+"""
+
 import numpy as np
 import tensorflow as tf
 from tensorflow.keras.preprocessing.image import ImageDataGenerator
@@ -7,134 +11,145 @@ from tensorflow.keras.applications import MobileNetV2
 from tensorflow.keras.callbacks import EarlyStopping, ReduceLROnPlateau
 from sklearn.utils.class_weight import compute_class_weight
 
-# =========================
-# CONFIG
-# =========================
-IMG_SIZE = 160
-BATCH_SIZE = 16
-EPOCHS = 25
-
-TRAIN_DIR = "../dataset/train"
-VAL_DIR = "../dataset/validation"
-MODEL_SAVE_PATH = "../models/opti_fab_model.keras"
-
-# =========================
-# DATA GENERATORS
-# =========================
-train_datagen = ImageDataGenerator(
-    rescale=1./255,
-    rotation_range=15,
-    width_shift_range=0.1,
-    height_shift_range=0.1,
-    zoom_range=0.15,
-    shear_range=0.1,
-    horizontal_flip=True,
-    fill_mode='nearest'
+from config import (
+    TRAIN_DIR, VAL_DIR, MODEL_KERAS,
+    IMG_SIZE, BATCH_SIZE, EPOCHS, LEARNING_RATE,
+    DROPOUT_RATE, FINE_TUNE_FROM,
+    AUG_ROTATION, AUG_WIDTH_SHIFT, AUG_HEIGHT_SHIFT,
+    AUG_ZOOM, AUG_SHEAR,
+    EARLY_STOP_PATIENCE, REDUCE_LR_PATIENCE, REDUCE_LR_FACTOR,
+    get_logger,
 )
 
-val_datagen = ImageDataGenerator(rescale=1./255)
+log = get_logger(__name__)
+
+# =============================================================================
+# DATA
+# =============================================================================
+
+train_datagen = ImageDataGenerator(
+    rescale=1.0 / 255,
+    rotation_range=AUG_ROTATION,
+    width_shift_range=AUG_WIDTH_SHIFT,
+    height_shift_range=AUG_HEIGHT_SHIFT,
+    zoom_range=AUG_ZOOM,
+    shear_range=AUG_SHEAR,
+    horizontal_flip=True,
+    fill_mode="nearest",
+)
+
+val_datagen = ImageDataGenerator(rescale=1.0 / 255)
 
 train_generator = train_datagen.flow_from_directory(
     TRAIN_DIR,
     target_size=(IMG_SIZE, IMG_SIZE),
-    color_mode='grayscale',
+    color_mode="grayscale",
     batch_size=BATCH_SIZE,
-    class_mode='categorical'
+    class_mode="categorical",
 )
 
 val_generator = val_datagen.flow_from_directory(
     VAL_DIR,
     target_size=(IMG_SIZE, IMG_SIZE),
-    color_mode='grayscale',
+    color_mode="grayscale",
     batch_size=BATCH_SIZE,
-    class_mode='categorical'
+    class_mode="categorical",
 )
+
+log.info(f"Classes detected: {train_generator.class_indices}")
+log.info(f"Training samples: {train_generator.samples}")
+log.info(f"Validation samples: {val_generator.samples}")
 
 NUM_CLASSES = train_generator.num_classes
-print("Classes:", train_generator.class_indices)
 
-# =========================
-# CLASS WEIGHTS (Fix imbalance)
-# =========================
+# =============================================================================
+# CLASS WEIGHTS
+# =============================================================================
+
 class_weights = compute_class_weight(
-    class_weight='balanced',
+    class_weight="balanced",
     classes=np.unique(train_generator.classes),
-    y=train_generator.classes
+    y=train_generator.classes,
 )
 class_weights = dict(enumerate(class_weights))
-print("Class Weights:", class_weights)
+log.info(f"Class weights: {class_weights}")
 
-# =========================
-# MODEL BUILDING
-# =========================
+# =============================================================================
+# MODEL
+# =============================================================================
 
-# Input Layer (grayscale)
-inputs = layers.Input(shape=(IMG_SIZE, IMG_SIZE, 1))
+inputs = layers.Input(shape=(IMG_SIZE, IMG_SIZE, 1), name="input")
 
-# Convert grayscale → RGB
-x = layers.Conv2D(3, (1, 1), padding='same')(inputs)
+# Grayscale → RGB (MobileNetV2 expects 3 channels)
+x = layers.Conv2D(3, (1, 1), padding="same", name="gray_to_rgb")(inputs)
 
-# Load MobileNetV2
 base_model = MobileNetV2(
     input_shape=(IMG_SIZE, IMG_SIZE, 3),
     include_top=False,
-    weights='imagenet'
+    weights="imagenet",
 )
-
-# Fine-tuning strategy
 base_model.trainable = True
 
-# Freeze first 100 layers
-for layer in base_model.layers[:100]:
+for layer in base_model.layers[:FINE_TUNE_FROM]:
     layer.trainable = False
+
+log.info(
+    f"Trainable layers: {sum(1 for l in base_model.layers if l.trainable)} / "
+    f"{len(base_model.layers)}"
+)
 
 x = base_model(x, training=False)
 x = layers.GlobalAveragePooling2D()(x)
-x = layers.Dense(256, activation='relu')(x)
-x = layers.Dropout(0.4)(x)
-outputs = layers.Dense(NUM_CLASSES, activation='softmax')(x)
+x = layers.Dense(256, activation="relu")(x)
+x = layers.Dropout(DROPOUT_RATE)(x)
+outputs = layers.Dense(NUM_CLASSES, activation="softmax")(x)
 
 model = models.Model(inputs, outputs)
 
 model.compile(
-    optimizer=tf.keras.optimizers.Adam(learning_rate=1e-4),
-    loss='categorical_crossentropy',
-    metrics=['accuracy']
+    optimizer=tf.keras.optimizers.Adam(learning_rate=LEARNING_RATE),
+    loss="categorical_crossentropy",
+    metrics=["accuracy"],
 )
 
-model.summary()
+model.summary(print_fn=log.info)
 
-# =========================
+# =============================================================================
 # CALLBACKS
-# =========================
-early_stop = EarlyStopping(
-    monitor='val_loss',
-    patience=5,
-    restore_best_weights=True
-)
+# =============================================================================
 
-reduce_lr = ReduceLROnPlateau(
-    monitor='val_loss',
-    factor=0.5,
-    patience=3,
-    verbose=1
-)
+callbacks = [
+    EarlyStopping(
+        monitor="val_loss",
+        patience=EARLY_STOP_PATIENCE,
+        restore_best_weights=True,
+        verbose=1,
+    ),
+    ReduceLROnPlateau(
+        monitor="val_loss",
+        factor=REDUCE_LR_FACTOR,
+        patience=REDUCE_LR_PATIENCE,
+        verbose=1,
+    ),
+]
 
-# =========================
+# =============================================================================
 # TRAINING
-# =========================
+# =============================================================================
+
+log.info("Starting training...")
+
 history = model.fit(
     train_generator,
     validation_data=val_generator,
     epochs=EPOCHS,
     class_weight=class_weights,
-    callbacks=[early_stop, reduce_lr]
+    callbacks=callbacks,
 )
 
-# =========================
-# SAVE MODEL
-# =========================
-os.makedirs("../models", exist_ok=True)
-model.save(MODEL_SAVE_PATH)
+# =============================================================================
+# SAVE
+# =============================================================================
 
-print("✅ Model saved successfully:", MODEL_SAVE_PATH)
+model.save(MODEL_KERAS)
+log.info(f"Model saved: {MODEL_KERAS}")

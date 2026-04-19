@@ -1,0 +1,18 @@
+
+======================================================================
+  OPTI-FAB — Inference Benchmark Results
+  Hardware : NVIDIA RTX 4050 Laptop GPU
+  Model    : MobileNetV2 (ONNX, 160x160 grayscale)
+  Runs     : 500 (after 50 warm-up)
+======================================================================
+  Provider                   Mean   Median      P95      P99      FPS
+  ----------------------     (ms)     (ms)     (ms)     (ms)         
+  CPU                        2.64     2.46     3.12     3.72    379.1
+  CUDA                       2.74     2.33     4.01     6.38    364.8
+  Tensorrt                   0.79      0.8     1.05     1.17   1262.2
+
+  Speedup vs CPU baseline:
+    CUDA: 0.96x faster
+    Tensorrt: 3.34x faster
+
+======================================================================

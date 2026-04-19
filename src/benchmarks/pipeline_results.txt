@@ -1,0 +1,19 @@
+
+=================================================================
+  OPTI-FAB — Pipeline Latency Benchmark
+  Hardware : NVIDIA RTX 4050 Laptop GPU
+  Model    : MobileNetV2 ONNX + TensorRT FP16
+  Runs     : 100 per pipeline
+=================================================================
+
+  Metric                           File-Based     OPTI-FAB
+  ------------------------------------------------------
+  Mean latency (ms)                       8.3          3.0
+  Median latency (ms)                    7.74         2.47
+  P95 latency (ms)                      11.41         4.83
+  Min latency (ms)                       6.27         2.02
+  Throughput (fps)                      120.5        333.3
+
+  Latency reduction : 63.9%
+  Speedup           : 2.77x
+=================================================================
