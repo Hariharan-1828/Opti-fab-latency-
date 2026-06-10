@@ -14,6 +14,7 @@ import sys
 
 sys.path.append(str(Path(__file__).resolve().parent.parent))
 from config import MODEL_KERAS, IMG_SIZE, get_logger
+from mc_inference import run_mc_passes
 
 log = get_logger(__name__)
 
@@ -44,21 +45,16 @@ def benchmark_mc_passes(model, num_passes: int) -> dict:
     dummy_input = np.random.rand(1, IMG_SIZE, IMG_SIZE, 1).astype(np.float32)
 
     # Warmup
-    for _ in range(10):
-        model(dummy_input, training=False)
+    run_mc_passes(model, dummy_input, num_passes)
 
     latencies = []
     variances = []
 
     for _ in range(BENCH_RUNS):
         t0    = time.perf_counter()
-        preds = []
-        for _ in range(num_passes):
-            p = model(dummy_input, training=False).numpy()
-            preds.append(p)
+        preds = run_mc_passes(model, dummy_input, num_passes).numpy()
         t1 = time.perf_counter()
 
-        preds    = np.vstack(preds)
         mean_var = float(np.mean(np.var(preds, axis=0)))
         latencies.append((t1 - t0) * 1000)
         variances.append(mean_var)

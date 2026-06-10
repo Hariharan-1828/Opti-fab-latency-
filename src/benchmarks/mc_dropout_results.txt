@@ -1,28 +1,22 @@
 
 ======================================================================
-  OPTI-FAB -- MC Dropout Latency / Uncertainty Tradeoff
+  MC Dropout Latency / Uncertainty Tradeoff
   Hardware : NVIDIA RTX 4050 Laptop GPU
-  Model    : MobileNetV2 Keras (Dropout active, training=True)
+  Model    : MobileNetV2 Keras (Dropout active)
   Runs     : 50 per pass count
-  Fast path: ONNX+TRT = 0.79ms | MC path = below
 ======================================================================
 
   Passes        Mean (ms)   P95 (ms)      FPS       Variance    Stability
   --------------------------------------------------------------------
-  1                120.39     130.17      8.3     0.00000000         0.0%
-  5                896.82    1131.14      1.1     0.00000315       147.2%
-  10               1500.4    1981.83      0.7     0.00000616       287.9%
-  15              2256.78    3358.22      0.4     0.00000123        57.5%
-  20              3819.95    5821.17      0.3     0.00000348       162.6%
-  30              5329.42    7109.43      0.2     0.00000214       100.0%
+  1                 17.13      19.07     58.4     0.00000000         0.0%
+  5                 24.59      25.98     40.7     0.00001503       548.5%
+  10                40.09      43.16     24.9     0.00000185        67.5%
+  15                61.79       65.9     16.2     0.00000149        54.4%
+  20                 95.4     103.14     10.5     0.00000125        45.6%
+  30               359.81     389.16      2.8     0.00000274       100.0%
 
   Recommended: 5 passes
-  Latency    : 896.82 ms per uncertainty estimate
-  Throughput : 1.1 estimates/sec
-
-  Decision architecture:
-    conf >= 0.85, unc <= 0.05  -> TRT fast path (0.79ms) -> DECIDE
-    conf >= 0.85, unc >  0.05  -> MC Keras path -> DEFER
-    conf <  0.85               -> Continue streaming
+  Latency    : 24.59 ms
+  Throughput : 40.7 estimates/sec
 
 ======================================================================

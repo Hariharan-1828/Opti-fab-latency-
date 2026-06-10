@@ -80,11 +80,13 @@ def run_stream_simulation(img_path: str) -> dict:
             f"→ {decision}"
         )
 
-        if decision in ("REJECT", "ACCEPT"):
+        # Enforce that early exit is only allowed for REJECT (defects found).
+        # ACCEPT (clean wafer) can only be decided after scanning the entire frame.
+        if decision == "REJECT" or (decision == "ACCEPT" and row >= IMG_SIZE - SCAN_SPEED):
             results["decision"]     = decision
             results["decision_row"] = row
             log.info(
-                f"\nEarly exit at row {row}/{IMG_SIZE} "
+                f"\nDecision reached at row {row}/{IMG_SIZE} "
                 f"({100 * row // IMG_SIZE}% scanned) "
                 f"→ Decision: {decision} | Class: {CLASS_NAMES[pred_class]}"
             )

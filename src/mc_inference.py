@@ -33,19 +33,28 @@ def load_mc_model(model_path=None):
     mc_model = tf.keras.Model(inputs=inputs, outputs=x)
     return mc_model
 
+@tf.function
+def run_mc_passes(model, img_array, n: int):
+    preds = []
+    # Using python range unrolls the loop during tf.graph compilation.
+    # We pass training=False so that Batch Norm is run in inference mode.
+    # Dropout remains active because training=True was hardcoded during graph reconstruction.
+    for _ in range(n):
+        p = model(img_array, training=False)
+        preds.append(p[0])
+    return tf.stack(preds)
+
 def predict_with_uncertainty(model, img_array, num_passes=None):
     """
     Run multiple forward passes and return class prediction, confidence, and variance.
     """
     n = num_passes or MC_PASSES
 
-    # Batched forward pass for efficiency
-    batch = np.repeat(img_array, n, axis=0)
-    predictions = model.predict(batch, verbose=0)
+    P = run_mc_passes(model, img_array, n).numpy()  # shape: (N, K)
 
     # Calculate statistics
-    mean_preds = np.mean(predictions, axis=0)
-    variance_preds = np.var(predictions, axis=0)
+    mean_preds = np.mean(P, axis=0)
+    variance_preds = np.var(P, axis=0)
 
     pred_class = int(np.argmax(mean_preds))
     confidence = float(mean_preds[pred_class])
