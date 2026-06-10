@@ -1,0 +1,23 @@
+{
+  "title": "OPTI-FAB: Latency-First, Uncertainty-Aware Wafer Defect Classification",
+  "description": "OPTI-FAB is an edge-AI wafer inspection pipeline that processes visual data as a continuous pixel stream. By overlapping data acquisition with optimized TensorRT inference and using a confidence-gated early exit with uncertainty estimation, it reduces latency to enable inline defect rejection during wafer transport.",
+  "creators": [
+    {
+      "name": "Hariharan, M."
+    },
+    {
+      "name": "Asmitha, M."
+    }
+  ],
+  "access_right": "open",
+  "license": "MIT",
+  "keywords": [
+    "semiconductor manufacturing",
+    "wafer inspection",
+    "edge ai",
+    "tensorrt",
+    "early exit",
+    "uncertainty estimation"
+  ],
+  "upload_type": "software"
+}
