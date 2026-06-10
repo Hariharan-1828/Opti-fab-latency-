@@ -1,24 +1,4 @@
-"""
-OPTI-FAB — Real-Time Stream Inference Demo
-Pygame visualization of the stream-aware inference pipeline.
-
-Shows:
-  - Wafer image being scanned line by line
-  - Live confidence and uncertainty bars updating each tick
-  - Early exit moment highlighted with visual alert
-  - Side-by-side latency comparison: file-based vs stream
-  - Tick log showing per-row inference results
-
-Usage:
-    python demo/stream_demo.py
-    python demo/stream_demo.py --img_path dataset/test/crack/img001.png
-    python demo/stream_demo.py --speed fast
-
-Controls:
-    SPACE  - pause / resume
-    R      - restart with next image
-    Q/ESC  - quit
-"""
+# Real-time stream inference visualization using Pygame
 
 import os
 os.add_dll_directory(r"C:\Users\harih\AppData\Local\Programs\Python\Python310\Lib\site-packages\tensorrt_libs")
@@ -45,12 +25,10 @@ import pygame
 
 log = get_logger(__name__)
 
-UNCERTAINTY_MAX = 0.35   # Entropy-based threshold (normalized 0..1)
+# Max entropy-based uncertainty threshold
+UNCERTAINTY_MAX = 0.35
 
-# =============================================================================
-# DISPLAY CONFIG
-# =============================================================================
-
+# UI Layout configs
 WIN_W       = 1100
 WIN_H       = 680
 FPS         = 60
@@ -64,6 +42,7 @@ PANEL_Y     = 80
 PANEL_W     = 580
 PANEL_H     = 560
 
+# Palette
 BG          = (10,  10,  18)
 SURFACE     = (18,  18,  30)
 BORDER      = (50,  50,  70)
@@ -78,11 +57,8 @@ DARK_GRAY   = (40,  40,  55)
 SPEED_MAP   = {"slow": 80, "normal": 40, "fast": 15}
 
 
-# =============================================================================
-# ONNX SESSION
-# =============================================================================
-
 def get_session():
+    # Setup ORT session with TensorRT provider
     trt_cache = str(Path(__file__).resolve().parent.parent / "benchmarks" / "trt_engine_cache")
     providers = [
         (
@@ -100,10 +76,6 @@ def get_session():
     return ort.InferenceSession(str(MODEL_ONNX), providers=providers)
 
 
-# =============================================================================
-# INFERENCE
-# =============================================================================
-
 def run_inference(session, buffer):
     input_name = session.get_inputs()[0].name
     inp        = buffer[np.newaxis, ...]
@@ -115,19 +87,16 @@ def run_inference(session, buffer):
     pred_class = int(np.argmax(preds))
     confidence = float(preds[pred_class])
 
-    # Entropy-based uncertainty (works with deterministic ONNX)
+    # Entropy calculation
     eps         = 1e-9
     entropy     = float(-np.sum(preds * np.log(preds + eps)))
     max_entropy = float(np.log(len(preds)))
-    uncertainty = entropy / max_entropy   # normalized 0..1
+    uncertainty = entropy / max_entropy
 
     return pred_class, confidence, uncertainty, infer_ms
 
 
-# =============================================================================
-# PYGAME HELPERS
-# =============================================================================
-
+# Pygame layout helpers
 def draw_text(surf, text, x, y, font, color=WHITE, anchor="topleft"):
     rendered = font.render(text, True, color)
     rect     = rendered.get_rect(**{anchor: (x, y)})
@@ -163,10 +132,6 @@ def reset_state():
         "start_time"     : time.perf_counter(),
     }
 
-
-# =============================================================================
-# MAIN DEMO
-# =============================================================================
 
 def run_demo(img_path=None, speed="normal"):
     pygame.init()
@@ -404,10 +369,7 @@ def run_demo(img_path=None, speed="normal"):
     pygame.quit()
 
 
-# =============================================================================
-# ENTRYPOINT
-# =============================================================================
-
+# CLI entrypoint
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="OPTI-FAB Stream Demo")
     parser.add_argument("--img_path", type=str, default=None)
@@ -415,6 +377,5 @@ if __name__ == "__main__":
                         choices=["slow", "normal", "fast"])
     args = parser.parse_args()
 
-    log.info("Starting OPTI-FAB Stream Demo")
-    log.info("Controls: SPACE=pause  R=next image  Q=quit")
+    log.info("Starting stream demo")
     run_demo(args.img_path, args.speed)

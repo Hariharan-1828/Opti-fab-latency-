@@ -1,7 +1,4 @@
-"""
-OPTI-FAB — Model Evaluation
-Generates classification report and confusion matrix on the test set.
-"""
+# Evaluate trained model on test dataset
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -17,10 +14,7 @@ from config import (
 
 log = get_logger(__name__)
 
-# =============================================================================
-# LOAD MODEL & DATA
-# =============================================================================
-
+# Load model & data
 log.info(f"Loading model from {MODEL_KERAS}")
 model = tf.keras.models.load_model(MODEL_KERAS)
 
@@ -38,19 +32,13 @@ test_data = test_datagen.flow_from_directory(
 log.info(f"Test samples: {test_data.samples}")
 log.info(f"Class indices: {test_data.class_indices}")
 
-# =============================================================================
-# PREDICTIONS
-# =============================================================================
-
-log.info("Running predictions...")
+# Run predictions
+log.info("Running inference on test set...")
 predictions = model.predict(test_data, verbose=1)
 y_pred = np.argmax(predictions, axis=1)
 y_true = test_data.classes
 
-# =============================================================================
-# CLASSIFICATION REPORT
-# =============================================================================
-
+# Generate classification report
 report = classification_report(
     y_true,
     y_pred,
@@ -64,12 +52,9 @@ metrics_path = RESULTS_DIR / "metrics.txt"
 with open(metrics_path, "w") as f:
     f.write(report)
 
-log.info(f"Metrics saved: {metrics_path}")
+log.info(f"Saved metrics: {metrics_path}")
 
-# =============================================================================
-# CONFUSION MATRIX
-# =============================================================================
-
+# Plot confusion matrix
 cm = confusion_matrix(y_true, y_pred)
 class_labels = list(test_data.class_indices.keys())
 
@@ -88,7 +73,7 @@ ax.set(
 )
 plt.xticks(rotation=45, ha="right")
 
-# Annotate cells with counts
+# Add text values to cell
 thresh = cm.max() / 2.0
 for i in range(cm.shape[0]):
     for j in range(cm.shape[1]):
@@ -103,7 +88,8 @@ plt.tight_layout()
 
 cm_path = RESULTS_DIR / "confusion_matrix.png"
 plt.savefig(cm_path, dpi=150)
-log.info(f"Confusion matrix saved: {cm_path}")
+log.info(f"Saved confusion matrix: {cm_path}")
 
 plt.show()
-log.info("Evaluation complete.")
+log.info("Evaluation done.")
+

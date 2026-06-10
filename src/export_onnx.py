@@ -1,8 +1,4 @@
-"""
-OPTI-FAB — ONNX Export
-Converts the trained Keras model to ONNX format for edge deployment.
-Compatible with NXP eIQ Toolkit and TensorRT workflows.
-"""
+# Export Keras model to ONNX format
 
 import tensorflow as tf
 import tf2onnx
@@ -15,19 +11,11 @@ from config import (
 
 log = get_logger(__name__)
 
-# =============================================================================
-# LOAD MODEL
-# =============================================================================
-
-log.info(f"Loading model from {MODEL_KERAS}")
+# Load trained model
+log.info(f"Loading Keras model from {MODEL_KERAS}")
 model = tf.keras.models.load_model(MODEL_KERAS, compile=False)
-log.info("Model loaded successfully")
 
-# =============================================================================
-# DEFINE INPUT SIGNATURE
-# =============================================================================
-
-# Input shape: (batch=1, height, width, channels=1 grayscale)
+# Define input spec (batch_size=1, height, width, channels=1)
 spec = (
     tf.TensorSpec(
         (1, IMG_SIZE, IMG_SIZE, 1),
@@ -38,11 +26,8 @@ spec = (
 
 log.info(f"Input spec: {spec}")
 
-# =============================================================================
-# EXPORT TO ONNX
-# =============================================================================
-
-log.info(f"Exporting to ONNX (opset {ONNX_OPSET})...")
+# Export using tf2onnx
+log.info(f"Converting model to ONNX format (opset {ONNX_OPSET})...")
 
 model_proto, _ = tf2onnx.convert.from_keras(
     model,
@@ -51,6 +36,6 @@ model_proto, _ = tf2onnx.convert.from_keras(
     output_path=str(MODEL_ONNX),
 )
 
-log.info(f"ONNX export successful")
-log.info(f"Model saved: {MODEL_ONNX}")
-log.info(f"Model size: {MODEL_ONNX.stat().st_size / 1e6:.2f} MB")
+log.info("ONNX export complete")
+log.info(f"Saved: {MODEL_ONNX} ({MODEL_ONNX.stat().st_size / 1e6:.2f} MB)")
+

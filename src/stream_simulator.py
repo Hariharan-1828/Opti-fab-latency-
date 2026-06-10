@@ -1,16 +1,4 @@
-"""
-OPTI-FAB — Stream Simulator
-Simulates a line-scan camera feeding pixel data row-by-row into a circular
-buffer. Runs MC inference on partial frames and applies confidence-gated
-early-exit logic.
-
-This is the core demonstration of OPTI-FAB's latency-first architecture:
-decisions are made before the full frame is acquired.
-
-Usage:
-    python stream_simulator.py
-    python stream_simulator.py --img_path dataset/test/crack/img001.png
-"""
+# Stream simulator for line-scan camera and early-exit inference
 
 import argparse
 import os
@@ -30,26 +18,15 @@ from mc_inference import load_mc_model, predict_with_uncertainty, apply_decision
 
 log = get_logger(__name__)
 
-
-# =============================================================================
-# STREAM SIMULATION
-# =============================================================================
-
 def run_stream_simulation(img_path: str) -> dict:
     """
-    Simulates line-scan acquisition and stream-aware inference on a single image.
-
-    Args:
-        img_path: Path to a grayscale test image.
-
-    Returns:
-        A dict containing timing, decision, and per-tick inference results.
+    Simulate row-by-row pixel ingestion and early-exit decision logic.
     """
     log.info(f"Loading image: {img_path}")
     full_image     = load_img(img_path, target_size=(IMG_SIZE, IMG_SIZE), color_mode="grayscale")
-    full_img_array = img_to_array(full_image) / 255.0   # shape: (H, W, 1)
+    full_img_array = img_to_array(full_image) / 255.0
 
-    # Circular buffer — holds the current sliding window of pixel rows
+    # Ring buffer for sliding window of scanned rows
     circular_buffer = np.zeros((IMG_SIZE, IMG_SIZE, 1), dtype=np.float32)
 
     results = {
@@ -68,19 +45,15 @@ def run_stream_simulation(img_path: str) -> dict:
     for row in range(0, IMG_SIZE, SCAN_SPEED):
         tick_count += 1
 
-        # Ingest the next chunk of pixel rows
+        # Read rows and update sliding window buffer
         chunk = full_img_array[row : row + SCAN_SPEED, :, :]
-
-        # Roll buffer up and write new rows at the bottom
-        circular_buffer          = np.roll(circular_buffer, -SCAN_SPEED, axis=0)
+        circular_buffer = np.roll(circular_buffer, -SCAN_SPEED, axis=0)
         circular_buffer[-SCAN_SPEED:, :, :] = chunk
 
-        # Wait until the buffer is at least half filled before inferring
+        # Wait until buffer has enough rows before running inference
         if row < IMG_SIZE // 2:
-            log.debug(f"[Tick {tick_count:02d}] Buffering... ({row}/{IMG_SIZE} rows)")
             continue
 
-        # Run MC inference on the current buffer state
         input_tensor = np.expand_dims(circular_buffer, axis=0)
         pred_class, conf, unc = predict_with_uncertainty(
             model, input_tensor, num_passes=MC_PASSES_FAST
@@ -103,39 +76,25 @@ def run_stream_simulation(img_path: str) -> dict:
             f"[Tick {tick_count:02d} | Row {row:03d}/{IMG_SIZE}] "
             f"Class: {CLASS_NAMES[pred_class]:<12} "
             f"Conf: {conf:.4f}  "
-            f"Unc: {unc:.6f}  "
+            f"Var: {unc:.6f}  "
             f"→ {decision}"
         )
 
-        # Early exit on REJECT or ACCEPT
         if decision in ("REJECT", "ACCEPT"):
             results["decision"]     = decision
             results["decision_row"] = row
             log.info(
-                f"\n{'='*55}\n"
-                f"  EARLY EXIT at row {row}/{IMG_SIZE} "
-                f"({100 * row // IMG_SIZE}% of frame scanned)\n"
-                f"  Decision  : {decision}\n"
-                f"  Class     : {CLASS_NAMES[pred_class]}\n"
-                f"  Confidence: {conf:.4f}\n"
-                f"  Uncertainty: {unc:.6f}\n"
-                f"{'='*55}"
+                f"\nEarly exit at row {row}/{IMG_SIZE} "
+                f"({100 * row // IMG_SIZE}% scanned) "
+                f"→ Decision: {decision} | Class: {CLASS_NAMES[pred_class]}"
             )
             break
 
     elapsed_ms = (time.perf_counter() - start_time) * 1000
     results["total_time_ms"] = round(elapsed_ms, 2)
 
-    if results["decision"] == "NONE":
-        log.info("No early exit — full frame processed. Standard decision path.")
-
-    log.info(f"Stream simulation complete in {elapsed_ms:.1f} ms")
+    log.info(f"Stream simulation done in {elapsed_ms:.1f} ms")
     return results
-
-
-# =============================================================================
-# ENTRYPOINT
-# =============================================================================
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="OPTI-FAB Stream Simulator")
@@ -143,11 +102,11 @@ if __name__ == "__main__":
         "--img_path",
         type=str,
         default=None,
-        help="Path to a test image. If not provided, picks the first image from TEST_DIR/crack/",
+        help="Path to a test image",
     )
     args = parser.parse_args()
 
-    # Resolve image path
+    # Find test image if not specified
     if args.img_path:
         img_path = args.img_path
     else:
@@ -161,16 +120,12 @@ if __name__ == "__main__":
             exit(1)
         img_path = str(default_dir / candidates[0])
 
-    # Load model once
     model = load_mc_model(MODEL_KERAS)
-
-    # Run simulation
     results = run_stream_simulation(img_path)
 
-    # Summary
-    log.info("\n--- SUMMARY ---")
-    log.info(f"Image       : {results['img_path']}")
-    log.info(f"Decision    : {results['decision']}")
-    log.info(f"Decision row: {results['decision_row']}")
-    log.info(f"Total time  : {results['total_time_ms']} ms")
-    log.info(f"Ticks run   : {len(results['ticks'])}")
+    print("\n--- SUMMARY ---")
+    print(f"Image       : {results['img_path']}")
+    print(f"Decision    : {results['decision']}")
+    print(f"Decision row: {results['decision_row']}")
+    print(f"Total time  : {results['total_time_ms']} ms")
+

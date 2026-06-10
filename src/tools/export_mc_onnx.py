@@ -1,17 +1,4 @@
-"""
-OPTI-FAB — MC Dropout ONNX Export
-Exports the Keras model to ONNX with Dropout nodes preserved and active.
-
-Standard export optimizes away Dropout entirely.
-This script disables that optimization and injects stochastic Dropout
-nodes manually into the graph for MC uncertainty estimation.
-
-Output:
-    models/opti_fab_model_mc.onnx
-
-Usage:
-    python tools/export_mc_onnx.py
-"""
+# Export Keras model to ONNX with Dropout active for MC uncertainty estimation
 
 import numpy as np
 import tensorflow as tf
@@ -30,77 +17,42 @@ log = get_logger(__name__)
 
 MC_MODEL_PATH = MODEL_DIR / "opti_fab_model_mc.onnx"
 
-
-# =============================================================================
-# STEP 1: Export with NO graph optimization (preserves Dropout)
-# =============================================================================
-
 def export_unoptimized():
     """
-    Exports the Keras model to ONNX with optimizations disabled.
-    This preserves Dropout nodes in the graph.
+    Export without optimization to keep Dropout layers.
     """
     log.info(f"Loading Keras model: {MODEL_KERAS}")
     model = tf.keras.models.load_model(str(MODEL_KERAS), compile=False)
 
     spec = (tf.TensorSpec((1, IMG_SIZE, IMG_SIZE, 1), tf.float32, name="input"),)
 
-    log.info("Exporting to ONNX with optimizations DISABLED...")
-
-    # Disable optimizations to preserve Dropout
+    log.info("Exporting unoptimized ONNX...")
     model_proto, _ = tf2onnx.convert.from_keras(
         model,
         input_signature=spec,
         opset=13,
-        output_path=None,        # Don't save yet
-        extra_opset=None,
-        custom_ops=None,
-        custom_op_handlers=None,
-        custom_rewriter=None,
-        inputs_as_nchw=None,
-        large_model=False,
+        output_path=None,
     )
 
-    log.info(f"Unoptimized graph has {len(model_proto.graph.node)} nodes")
-
-    # Check what we got
-    op_counts = {}
-    for node in model_proto.graph.node:
-        op_counts[node.op_type] = op_counts.get(node.op_type, 0) + 1
-
-    log.info("Node types in unoptimized graph:")
-    for op, count in sorted(op_counts.items(), key=lambda x: -x[1]):
-        log.info(f"  {op:<30} {count}")
-
+    log.info(f"Nodes in unoptimized graph: {len(model_proto.graph.node)}")
     return model_proto
-
-
-# =============================================================================
-# STEP 2: Inject stochastic Dropout into the graph
-# =============================================================================
 
 def inject_dropout_nodes(model_proto, dropout_rate=DROPOUT_RATE):
     """
-    Finds Identity/Dropout-like nodes and replaces them with
-    stochastic Dropout nodes (training_mode=True).
+    Replace Identity nodes with active Dropout nodes.
     """
     graph = model_proto.graph
 
-    # Find candidates: Identity nodes OR any node whose name suggests Dropout
     candidates = []
     for node in graph.node:
         name_lower = node.name.lower()
-        if node.op_type == "Identity":
-            candidates.append(node)
-        elif node.op_type == "Dropout":
-            candidates.append(node)
-        elif "dropout" in name_lower:
+        if node.op_type in ("Identity", "Dropout") or "dropout" in name_lower:
             candidates.append(node)
 
     log.info(f"Found {len(candidates)} Dropout candidate nodes")
 
     if not candidates:
-        log.warning("No candidates found — will inject Dropout after Dense layer")
+        log.warning("No candidates found, injecting after Dense layer")
         return inject_after_dense(model_proto, dropout_rate)
 
     new_initializers = []
@@ -130,48 +82,35 @@ def inject_dropout_nodes(model_proto, dropout_rate=DROPOUT_RATE):
         )
 
         dropout_replacements.append((node, new_node))
-        log.info(f"  Replacing {node.op_type} '{node.name}' with stochastic Dropout")
+        log.info(f"Replacing {node.op_type} '{node.name}' with active Dropout")
 
-    # Apply replacements
     for old_node, new_node in dropout_replacements:
         idx = list(graph.node).index(old_node)
         graph.node.remove(old_node)
         graph.node.insert(idx, new_node)
 
     graph.initializer.extend(new_initializers)
-
     return model_proto
-
-
-# =============================================================================
-# STEP 3: Fallback — inject Dropout after the Dense(256) layer
-# =============================================================================
 
 def inject_after_dense(model_proto, dropout_rate=DROPOUT_RATE):
     """
-    Fallback: directly inserts a Dropout node after the first Dense (Gemm) layer.
-    This is the layer that had Dropout(0.4) during training.
+    Inject active Dropout node after first Gemm (Dense) layer as fallback.
     """
     graph = model_proto.graph
 
-    # Find Gemm nodes (Dense layers in ONNX)
     gemm_nodes = [n for n in graph.node if n.op_type == "Gemm"]
-    log.info(f"Found {len(gemm_nodes)} Gemm (Dense) nodes")
+    log.info(f"Found {len(gemm_nodes)} Gemm nodes")
 
     if not gemm_nodes:
-        log.error("No Gemm nodes found — cannot inject Dropout")
+        log.error("No Gemm nodes found")
         return model_proto
 
-    # Target: first Gemm node (Dense(256)) — inject Dropout after it
     target_gemm = gemm_nodes[0]
     gemm_output = target_gemm.output[0]
 
-    log.info(f"Injecting Dropout after: {target_gemm.name} (output: {gemm_output})")
-
-    # New intermediate tensor name
+    log.info(f"Injecting Dropout after {target_gemm.name}")
     dropout_output = f"{gemm_output}_after_mc_dropout"
 
-    # Rate and training mode constants
     rate_init = numpy_helper.from_array(
         np.array(dropout_rate, dtype=np.float64), name="mc_injected_rate"
     )
@@ -179,7 +118,6 @@ def inject_after_dense(model_proto, dropout_rate=DROPOUT_RATE):
         np.array(True, dtype=bool), name="mc_injected_training"
     )
 
-    # Create Dropout node
     dropout_node = helper.make_node(
         "Dropout",
         inputs=[gemm_output, "mc_injected_rate", "mc_injected_training"],
@@ -188,7 +126,6 @@ def inject_after_dense(model_proto, dropout_rate=DROPOUT_RATE):
         seed=42,
     )
 
-    # Remap: any node that took gemm_output now takes dropout_output
     for node in graph.node:
         if node == target_gemm:
             continue
@@ -199,23 +136,16 @@ def inject_after_dense(model_proto, dropout_rate=DROPOUT_RATE):
         del node.input[:]
         node.input.extend(new_inputs)
 
-    # Insert Dropout node right after target_gemm
     gemm_idx = list(graph.node).index(target_gemm)
     graph.node.insert(gemm_idx + 1, dropout_node)
     graph.initializer.extend([rate_init, training_init])
 
-    log.info(f"Dropout injected after Dense(256) layer")
     return model_proto
-
-
-# =============================================================================
-# STEP 4: Verify variance > 0
-# =============================================================================
 
 def verify_variance(model_path, num_passes=15):
     import onnxruntime as ort
 
-    log.info(f"\nVerifying MC Dropout variance...")
+    log.info(f"Verifying variance on: {model_path}")
     session = ort.InferenceSession(
         str(model_path),
         providers=["CPUExecutionProvider"],
@@ -232,38 +162,20 @@ def verify_variance(model_path, num_passes=15):
     outputs  = np.vstack(outputs)
     mean_var = float(np.mean(np.var(outputs, axis=0)))
 
-    log.info(f"  Mean variance across {num_passes} passes: {mean_var:.8f}")
-
+    log.info(f"Mean variance: {mean_var:.8f}")
     if mean_var > 1e-8:
-        log.info("  MC Dropout WORKING -- variance confirmed > 0")
+        log.info("MC Dropout active in ONNX runtime")
         return True
     else:
-        log.warning("  Variance still 0 -- Dropout not stochastic in ONNX runtime")
-        log.warning("  ONNX runtime ignores training_mode on CPU for some opsets")
-        log.warning("  Recommendation: use Keras model directly for MC inference")
+        log.warning("Variance is 0 - ORT might ignore training_mode on CPU")
         return False
 
-
-# =============================================================================
-# MAIN
-# =============================================================================
-
 if __name__ == "__main__":
-    # Export unoptimized
     model_proto = export_unoptimized()
-
-    # Inject stochastic Dropout
     model_proto = inject_dropout_nodes(model_proto)
 
-    # Save
-    log.info(f"Saving MC model to {MC_MODEL_PATH}...")
+    log.info(f"Saving to {MC_MODEL_PATH}...")
     onnx.save(model_proto, str(MC_MODEL_PATH))
-    log.info(f"Saved ({MC_MODEL_PATH.stat().st_size / 1e6:.2f} MB)")
 
-    # Verify
-    works = verify_variance(MC_MODEL_PATH)
+    verify_variance(MC_MODEL_PATH)
 
-    if not works:
-        log.info("\nFalling back to Keras-based MC inference...")
-        log.info("See mc_inference.py -- load_mc_model() uses Keras with training=True")
-        log.info("This is the correct production approach for uncertainty estimation")

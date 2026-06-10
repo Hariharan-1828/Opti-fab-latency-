@@ -1,7 +1,4 @@
-"""
-OPTI-FAB — Model Training
-MobileNetV2 backbone, grayscale input, 8-class defect classifier.
-"""
+# Model training using MobileNetV2 for wafer defect classification
 
 import numpy as np
 import tensorflow as tf
@@ -23,10 +20,7 @@ from config import (
 
 log = get_logger(__name__)
 
-# =============================================================================
-# DATA
-# =============================================================================
-
+# Data generators
 train_datagen = ImageDataGenerator(
     rescale=1.0 / 255,
     rotation_range=AUG_ROTATION,
@@ -56,16 +50,13 @@ val_generator = val_datagen.flow_from_directory(
     class_mode="categorical",
 )
 
-log.info(f"Classes detected: {train_generator.class_indices}")
-log.info(f"Training samples: {train_generator.samples}")
-log.info(f"Validation samples: {val_generator.samples}")
+log.info(f"Classes: {train_generator.class_indices}")
+log.info(f"Train samples: {train_generator.samples}")
+log.info(f"Val samples: {val_generator.samples}")
 
 NUM_CLASSES = train_generator.num_classes
 
-# =============================================================================
-# CLASS WEIGHTS
-# =============================================================================
-
+# Compute class weights to handle imbalance
 class_weights = compute_class_weight(
     class_weight="balanced",
     classes=np.unique(train_generator.classes),
@@ -74,13 +65,10 @@ class_weights = compute_class_weight(
 class_weights = dict(enumerate(class_weights))
 log.info(f"Class weights: {class_weights}")
 
-# =============================================================================
-# MODEL
-# =============================================================================
-
+# Build model
 inputs = layers.Input(shape=(IMG_SIZE, IMG_SIZE, 1), name="input")
 
-# Grayscale → RGB (MobileNetV2 expects 3 channels)
+# Map grayscale to 3 channels for MobileNetV2
 x = layers.Conv2D(3, (1, 1), padding="same", name="gray_to_rgb")(inputs)
 
 base_model = MobileNetV2(
@@ -90,6 +78,7 @@ base_model = MobileNetV2(
 )
 base_model.trainable = True
 
+# Freeze base layers up to FINE_TUNE_FROM
 for layer in base_model.layers[:FINE_TUNE_FROM]:
     layer.trainable = False
 
@@ -114,10 +103,7 @@ model.compile(
 
 model.summary(print_fn=log.info)
 
-# =============================================================================
-# CALLBACKS
-# =============================================================================
-
+# Callbacks
 callbacks = [
     EarlyStopping(
         monitor="val_loss",
@@ -133,10 +119,7 @@ callbacks = [
     ),
 ]
 
-# =============================================================================
-# TRAINING
-# =============================================================================
-
+# Train
 log.info("Starting training...")
 
 history = model.fit(
@@ -147,9 +130,7 @@ history = model.fit(
     callbacks=callbacks,
 )
 
-# =============================================================================
-# SAVE
-# =============================================================================
-
+# Save
 model.save(MODEL_KERAS)
-log.info(f"Model saved: {MODEL_KERAS}")
+log.info(f"Model saved to {MODEL_KERAS}")
+

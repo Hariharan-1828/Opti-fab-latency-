@@ -1,15 +1,4 @@
-"""
-OPTI-FAB — Pipeline Benchmark
-Measures and compares end-to-end latency between:
-  1. File-based pipeline  (traditional: save → load → infer)
-  2. Stream pipeline      (OPTI-FAB: circular buffer → infer)
-
-This is the core evidence for the 41% latency reduction claim.
-Run this AFTER benchmark_trt.py so TRT engine is already cached.
-
-Usage:
-    python benchmarks/benchmark_pipeline.py
-"""
+# Benchmark comparing file-based vs stream-based inference pipelines
 
 import os
 
@@ -42,13 +31,8 @@ RESULTS_FILE = RESULTS_DIR / "pipeline_results.txt"
 
 RESULTS_DIR.mkdir(parents=True, exist_ok=True)
 
-
-# =============================================================================
-# SHARED: ORT SESSION
-# =============================================================================
-
 def get_session():
-    """Returns a TensorRT-accelerated onnxruntime session."""
+    # Setup session with TRT EP
     trt_cache = str(RESULTS_DIR / "trt_engine_cache")
     providers = [
         (
@@ -65,63 +49,43 @@ def get_session():
     ]
     return ort.InferenceSession(str(MODEL_ONNX), providers=providers)
 
-
-# =============================================================================
-# PIPELINE 1: FILE-BASED (traditional)
-# =============================================================================
-
 def file_based_pipeline(session, img_array: np.ndarray) -> float:
     """
     Simulates traditional file-based pipeline:
-      1. Save image to disk as PNG
-      2. OS flush (simulated with os.fsync)
-      3. Read image back from disk
-      4. Preprocess
-      5. Run inference
-    Returns end-to-end time in ms.
+      Save image -> OS flush -> Read image -> Preprocess -> Run inference
     """
     input_name = session.get_inputs()[0].name
 
     t0 = time.perf_counter()
 
-    # Step 1: Save to disk
+    # Save to disk
     with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp:
         tmp_path = tmp.name
     img_pil = Image.fromarray((img_array[:, :, 0] * 255).astype(np.uint8), mode="L")
     img_pil.save(tmp_path)
 
-    # Step 2: OS flush
+    # OS flush
     with open(tmp_path, "ab") as f:
         f.flush()
         os.fsync(f.fileno())
 
-    # Step 3: Read back from disk
+    # Read back
     img_loaded = Image.open(tmp_path).convert("L")
     img_np     = np.array(img_loaded, dtype=np.float32) / 255.0
-    img_np     = img_np[np.newaxis, :, :, np.newaxis]  # (1, H, W, 1)
+    img_np     = img_np[np.newaxis, :, :, np.newaxis]
 
-    # Step 4: Inference
+    # Inference
     session.run(None, {input_name: img_np})
 
     t1 = time.perf_counter()
-
-    # Cleanup
     os.unlink(tmp_path)
 
-    return (t1 - t0) * 1000  # ms
-
-
-# =============================================================================
-# PIPELINE 2: STREAM-BASED (OPTI-FAB)
-# =============================================================================
+    return (t1 - t0) * 1000
 
 def stream_pipeline(session, img_array: np.ndarray) -> float:
     """
-    Simulates OPTI-FAB stream pipeline:
-      1. Feed pixel rows into circular buffer as they arrive
-      2. Begin inference once buffer is half full
-      3. Apply confidence gate — exit early if threshold met
-    Returns end-to-end time in ms.
+    Simulates streaming pipeline:
+      Ingest row-by-row into circular buffer -> Infer -> Early exit
     """
     input_name      = session.get_inputs()[0].name
     circular_buffer = np.zeros((IMG_SIZE, IMG_SIZE, 1), dtype=np.float32)
@@ -141,15 +105,10 @@ def stream_pipeline(session, img_array: np.ndarray) -> float:
 
         confidence = float(np.max(preds))
         if confidence >= CONFIDENCE_THRESHOLD:
-            break   # Early exit
+            break
 
     t1 = time.perf_counter()
-    return (t1 - t0) * 1000  # ms
-
-
-# =============================================================================
-# MAIN
-# =============================================================================
+    return (t1 - t0) * 1000
 
 def run_benchmark():
     if not MODEL_ONNX.exists():
@@ -175,7 +134,6 @@ def run_benchmark():
     session = get_session()
     log.info("Session ready")
 
-    # Use a fixed dummy array if not enough real images
     dummy = np.random.rand(IMG_SIZE, IMG_SIZE, 1).astype(np.float32)
 
     def get_img(idx):
@@ -186,7 +144,7 @@ def run_benchmark():
             return arr[:, :, np.newaxis]
         return dummy
 
-    # Warm up both pipelines
+    # Warm up
     log.info("Warming up...")
     for i in range(10):
         img = get_img(i)
@@ -215,18 +173,15 @@ def run_benchmark():
     reduction   = round((1 - stream_mean / file_mean) * 100, 1)
     speedup     = round(file_mean / stream_mean, 2)
 
-    # ==========================================================================
-    # RESULTS TABLE
-    # ==========================================================================
-
+    # Save results
     output = (
         f"\n{'='*65}\n"
-        f"  OPTI-FAB — Pipeline Latency Benchmark\n"
+        f"  Pipeline Latency Benchmark\n"
         f"  Hardware : NVIDIA RTX 4050 Laptop GPU\n"
         f"  Model    : MobileNetV2 ONNX + TensorRT FP16\n"
         f"  Runs     : {BENCH_RUNS} per pipeline\n"
         f"{'='*65}\n\n"
-        f"  {'Metric':<30} {'File-Based':>12} {'OPTI-FAB':>12}\n"
+        f"  {'Metric':<30} {'File-Based':>12} {'Stream':>12}\n"
         f"  {'-'*54}\n"
         f"  {'Mean latency (ms)':<30} {file_mean:>12} {stream_mean:>12}\n"
         f"  {'Median latency (ms)':<30} {round(float(np.median(file_latencies)),2):>12} {round(float(np.median(stream_latencies)),2):>12}\n"
@@ -246,6 +201,6 @@ def run_benchmark():
 
     log.info(f"Results saved: {RESULTS_FILE}")
 
-
 if __name__ == "__main__":
     run_benchmark()
+

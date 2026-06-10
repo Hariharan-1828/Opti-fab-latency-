@@ -1,15 +1,4 @@
-"""
-OPTI-FAB — MC Dropout Latency Profiler (Keras Path)
-Profiles Monte-Carlo Dropout uncertainty estimation using the Keras model
-with training=True, which is the correct implementation for MC Dropout.
-
-Architecture:
-    Fast path    : ONNX + TensorRT (0.79ms) -- high confidence decisions
-    MC path      : Keras + training=True    -- uncertainty estimation
-
-Usage:
-    python benchmarks/benchmark_mc_dropout.py
-"""
+# Profile Monte-Carlo Dropout latency/uncertainty tradeoff using Keras model
 
 import os
 os.add_dll_directory(r"C:\Users\harih\AppData\Local\Programs\Python\Python310\Lib\site-packages\tensorrt_libs")
@@ -35,7 +24,6 @@ RESULTS_FILE = RESULTS_DIR / "mc_dropout_results.txt"
 
 RESULTS_DIR.mkdir(parents=True, exist_ok=True)
 
-
 def load_mc_model():
     log.info(f"Loading Keras model: {MODEL_KERAS}")
     base_model = tf.keras.models.load_model(str(MODEL_KERAS))
@@ -45,18 +33,17 @@ def load_mc_model():
     for layer in base_model.layers[1:]:
         if isinstance(layer, tf.keras.layers.Dropout):
             x = layer(x, training=True)
-            log.info(f"  Dropout active: {layer.name} (rate={layer.rate})")
+            log.info(f"  Dropout layer active: {layer.name}")
         else:
             x = layer(x)
 
     mc_model = tf.keras.Model(inputs=inputs, outputs=x)
-    log.info("MC model ready")
     return mc_model
-
 
 def benchmark_mc_passes(model, num_passes: int) -> dict:
     dummy_input = np.random.rand(1, IMG_SIZE, IMG_SIZE, 1).astype(np.float32)
 
+    # Warmup
     for _ in range(10):
         model(dummy_input, training=False)
 
@@ -84,13 +71,12 @@ def benchmark_mc_passes(model, num_passes: int) -> dict:
         "throughput"   : round(1000.0 / float(np.mean(latencies)), 1),
     }
 
-
 def run_benchmark():
     model = load_mc_model()
 
     results = []
     for n in PASS_COUNTS:
-        log.info(f"Benchmarking {n} MC passes...")
+        log.info(f"Benchmarking {n} passes...")
         r = benchmark_mc_passes(model, n)
         results.append(r)
         log.info(f"  {n} passes -> {r['mean_ms']} ms | variance: {r['mean_variance']:.8f}")
@@ -99,11 +85,10 @@ def run_benchmark():
 
     output = (
         f"\n{'='*70}\n"
-        f"  OPTI-FAB -- MC Dropout Latency / Uncertainty Tradeoff\n"
+        f"  MC Dropout Latency / Uncertainty Tradeoff\n"
         f"  Hardware : NVIDIA RTX 4050 Laptop GPU\n"
-        f"  Model    : MobileNetV2 Keras (Dropout active, training=True)\n"
+        f"  Model    : MobileNetV2 Keras (Dropout active)\n"
         f"  Runs     : {BENCH_RUNS} per pass count\n"
-        f"  Fast path: ONNX+TRT = 0.79ms | MC path = below\n"
         f"{'='*70}\n\n"
         f"  {'Passes':<10} {'Mean (ms)':>12} {'P95 (ms)':>10} {'FPS':>8} {'Variance':>14} {'Stability':>12}\n"
         f"  {'-'*68}\n"
@@ -126,23 +111,17 @@ def run_benchmark():
     if recommended:
         output += (
             f"\n  Recommended: {recommended['passes']} passes\n"
-            f"  Latency    : {recommended['mean_ms']} ms per uncertainty estimate\n"
+            f"  Latency    : {recommended['mean_ms']} ms\n"
             f"  Throughput : {recommended['throughput']} estimates/sec\n"
         )
 
-    output += (
-        f"\n  Decision architecture:\n"
-        f"    conf >= 0.85, unc <= 0.05  -> TRT fast path (0.79ms) -> DECIDE\n"
-        f"    conf >= 0.85, unc >  0.05  -> MC Keras path -> DEFER\n"
-        f"    conf <  0.85               -> Continue streaming\n"
-        f"\n{'='*70}\n"
-    )
+    output += f"\n{'='*70}\n"
 
     print(output)
     with open(RESULTS_FILE, "w") as f:
         f.write(output)
     log.info(f"Results saved: {RESULTS_FILE}")
 
-
 if __name__ == "__main__":
     run_benchmark()
+
