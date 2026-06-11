@@ -12,6 +12,10 @@ from config import (
 
 log = get_logger(__name__)
 
+class PermanentDropout(tf.keras.layers.Dropout):
+    def call(self, inputs, training=None):
+        return super().call(inputs, training=True)
+
 def load_mc_model(model_path=None):
     """
     Load Keras model and enable dropout at inference time.
@@ -21,28 +25,19 @@ def load_mc_model(model_path=None):
 
     base_model = tf.keras.models.load_model(str(path))
 
-    # Force dropout layers to stay active during inference
+    # Rebuild inference graph replacing standard Dropout with PermanentDropout
     inputs = base_model.input
     x = inputs
     for layer in base_model.layers[1:]:
         if isinstance(layer, tf.keras.layers.Dropout):
-            x = layer(x, training=True)
+            x = PermanentDropout(rate=layer.rate)(x)
         else:
             x = layer(x)
 
     mc_model = tf.keras.Model(inputs=inputs, outputs=x)
     return mc_model
 
-@tf.function
-def run_mc_passes(model, img_array, n: int):
-    preds = []
-    # Using python range unrolls the loop during tf.graph compilation.
-    # We pass training=False so that Batch Norm is run in inference mode.
-    # Dropout remains active because training=True was hardcoded during graph reconstruction.
-    for _ in range(n):
-        p = model(img_array, training=False)
-        preds.append(p[0])
-    return tf.stack(preds)
+_MC_FUNCTIONS = {}
 
 def predict_with_uncertainty(model, img_array, num_passes=None):
     """
@@ -50,7 +45,27 @@ def predict_with_uncertainty(model, img_array, num_passes=None):
     """
     n = num_passes or MC_PASSES
 
-    P = run_mc_passes(model, img_array, n).numpy()  # shape: (N, K)
+    model_id = id(model)
+    if model_id not in _MC_FUNCTIONS:
+        log.info("Compiling tf.function for MC Dropout dynamic sequential passes...")
+        
+        # Specify input signature with passes as a Tensor to prevent re-compilation / unrolling
+        @tf.function(input_signature=[
+            tf.TensorSpec(shape=[1, IMG_SIZE, IMG_SIZE, 1], dtype=tf.float32),
+            tf.TensorSpec(shape=[], dtype=tf.int32)
+        ])
+        def run_mc_passes_compiled(x, passes):
+            preds = tf.TensorArray(dtype=tf.float32, size=passes)
+            for i in tf.range(passes):
+                p = model(x, training=False)  # BN runs in inference mode
+                preds = preds.write(i, p[0])
+            return preds.stack()
+            
+        _MC_FUNCTIONS[model_id] = run_mc_passes_compiled
+
+    compiled_fn = _MC_FUNCTIONS[model_id]
+    passes_tensor = tf.constant(n, dtype=tf.int32)
+    P = compiled_fn(img_array, passes_tensor).numpy()  # shape: (N, K)
 
     # Calculate statistics
     mean_preds = np.mean(P, axis=0)
@@ -61,6 +76,8 @@ def predict_with_uncertainty(model, img_array, num_passes=None):
     uncertainty = float(variance_preds[pred_class])
 
     return pred_class, confidence, uncertainty
+
+
 
 def apply_decision_gate(pred_class, confidence, uncertainty, defect_classes):
     """
