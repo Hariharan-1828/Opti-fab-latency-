@@ -12,21 +12,23 @@
     T\kern-.1667em\lower.7ex\hbox{E}\kern-.125emX}}
 \begin{document}
 
-\title{OPTI-FAB: Latency-First Stream-Aware Inference with Confidence-Gated Early Exit for Real-Time Wafer Defect Classification}
+\title{OPTI-FAB: Latency-First Stream-Aware Inference with Confidence-Gated Early Exit for Real-Time Wafer Defect Classification\thanks{Implementation code is available at \url{https://github.com/Hariharan-1828/Opti-fab-latency-.git}}}
 
 \author{\IEEEauthorblockN{Hariharan M.}
 \IEEEauthorblockA{\textit{Independent Researcher} \\
+ORCID: 0009-XXXX-XXXX-XXXX \\
 Email: hariharan.m1828@gmail.com}
 \and
 \IEEEauthorblockN{Asmitha M.}
 \IEEEauthorblockA{\textit{Independent Researcher} \\
+ORCID: 0009-XXXX-XXXX-XXXX \\
 Email: asmitha7634@gmail.com}
 }
 
 \maketitle
 
 \begin{abstract}
-Automated visual inspection of semiconductor wafers using deep neural networks is critical for modern fab yield management. However, traditional deployment pipelines process images in a serialized capture-save-load-infer loop. Our profiling confirms that 63.9\% of the end-to-end pipeline latency is spent on file I/O, OS buffering, and memory transfers. This latency bottleneck makes inline wafer rejection at transport speeds (e.g., 100~mm/s) practically unfeasible. In this work, we present OPTI-FAB, a latency-first framework that reframes wafer inspection as a streaming-systems problem on a Laptop GPU. OPTI-FAB processes inspection data as a continuous pixel stream using a circular sliding-window buffer, overlapping acquisition with inference. We introduce a confidence-gated decision mechanism utilizing normalized Shannon entropy to trigger early exits, allowing defect classification before full-frame capture. For borderline cases, we implement a dual-path architecture that routes uncertain frames out-of-band to a sequential Monte Carlo (MC) Dropout pipeline for epistemic uncertainty estimation. Optimized with TensorRT FP16, our model achieves a mean inference latency of 0.79~ms on an NVIDIA RTX 4050 Laptop GPU, enabling a 63.9\% reduction in mean end-to-end pipeline latency (3.00~ms vs. 8.30~ms), with median latency of 2.47~ms satisfying the 3.0~ms inline rejection budget under nominal GPU scheduling conditions. OPTI-FAB achieves 90\% classification accuracy on full-frame images and 53.3\% accuracy under live streaming early-exit conditions (at 92.0\% early-exit rate, mean scan completion 59.7\%), demonstrating proof-of-concept feasibility for inline quality control at wafer transport speeds. Closing the gap between full-frame and streaming accuracy via partial-frame training augmentation is identified as the primary direction for future work.
+Automated visual inspection of semiconductor wafers using deep neural networks is critical for modern fab yield management. However, traditional deployment pipelines process images in a serialized capture-save-load-infer loop. Our profiling confirms that 63.9\% of the end-to-end pipeline latency is spent on file I/O, OS buffering, and memory transfers. This latency bottleneck makes inline wafer rejection at transport speeds (e.g., 100~mm/s) practically unfeasible. In this work, we present OPTI-FAB, a latency-first framework that reframes wafer inspection as a streaming-systems problem on a Laptop GPU. OPTI-FAB processes inspection data as a continuous pixel stream using a circular sliding-window buffer, overlapping acquisition with inference. We introduce a confidence-gated decision mechanism utilizing normalized Shannon entropy to trigger early exits, allowing defect classification before full-frame capture. For borderline cases, we implement a dual-path architecture that routes uncertain frames out-of-band to a sequential Monte Carlo (MC) Dropout pipeline for epistemic uncertainty estimation. Optimized with TensorRT FP16, our model achieves a mean inference latency of 0.79~ms on an NVIDIA RTX 4050 Laptop GPU, enabling a 63.9\% reduction in mean end-to-end pipeline latency (3.00~ms vs. 8.30~ms), with median latency of 2.47~ms satisfying the 3.0~ms inline rejection budget under nominal GPU scheduling conditions. OPTI-FAB achieves 91\% classification accuracy on full-frame images and 53.3\% accuracy under live streaming early-exit conditions (at 92.0\% early-exit rate, mean scan completion 59.7\%), demonstrating proof-of-concept feasibility for inline quality control at wafer transport speeds. Closing the gap between full-frame and streaming accuracy via partial-frame training augmentation is identified as the primary direction for future work.
 \end{abstract}
 
 \begin{IEEEkeywords}
@@ -55,7 +57,7 @@ To ensure robustness, OPTI-FAB incorporates a dual-path inference design. High-c
 \section{Related Work}
 Automated surface inspection in semiconductor manufacturing has progressed from traditional template matching and thresholding to deep convolutional neural networks (CNNs). Recent survey work by Luan et al.~\cite{luan2020wafer} summarizes CNN architectures applied to wafer defect patterns, typically highlighting offline visual classification. For inline applications, Zhao et al.~\cite{zhao2023yolov8} proposed YOLOv8-based defect detection. However, these methods assume full-frame availability, ignoring streaming latency.
 
-To reduce inference times under tight computational budgets, early-exit networks have been introduced. Works such as BranchyNet~\cite{teerapittayanon2016branchynet} and surveys by Rahmath et al.~\cite{rahmath2024early} demonstrate that easy-to-classify samples can exit early at intermediate layers, reducing execution costs. Similarly, adaptive confidence gating (e.g., Mokssit et al.~\cite{mokssit2025confidence}) and multi-exit experts (e.g., BEEM~\cite{bajpai2025beem}) route inputs dynamically based on output confidence. 
+To reduce inference times under tight computational budgets, early-exit networks have been introduced. Works such as BranchyNet~\cite{teerapittayanon2016branchynet} and surveys by Rahmath et al.~\cite{rahmath2024early} demonstrate that easy-to-classify samples can exit early at intermediate layers, reducing execution costs. Similarly, in concurrent work, Mokssit et al.~\cite{mokssit2025confidence} propose adaptive confidence gating, while multi-exit experts (e.g., BEEM~\cite{bajpai2025beem}) route inputs dynamically based on output confidence. 
 
 Uncertainty estimation via Monte Carlo (MC) Dropout, proposed by Gal and Ghahramani~\cite{gal2016dropout}, has been widely adopted to gauge epistemic uncertainty in deep networks. In industrial contexts, Li et al.~\cite{li2024edge} explored edge AI for fault detection, yet literature lacks the integration of sliding-window row streams with gated early exit and MC Dropout. OPTI-FAB fills this gap.
 
@@ -101,9 +103,7 @@ where $\epsilon = 1 \times 10^{-9}$. The decision logic at each tick is governed
 \end{itemize}
 
 \subsection{Monte Carlo (MC) Dropout Uncertainty Path}
-For borderline cases where the fast path output triggers a deferral, the system switches to the MC Dropout path~\cite{gal2016dropout}. The inference graph is reconstructed by forcing the Keras dropout layer active (\texttt{training=True}) while keeping Batch Normalization in inference mode (\texttt{training=False}) to prevent statistics distortion on single frames.
-
-To obtain stochastic predictions, the model is evaluated with dropout layers forced into training mode while Batch Normalization layers remain in inference mode, preventing running statistics distortion on single-sample inputs. The $j$-th stochastic forward pass is computed as:
+For borderline cases where the fast path output triggers a deferral, the system switches to the MC Dropout path~\cite{gal2016dropout}. To obtain stochastic predictions, the model is evaluated with dropout layers forced into training mode while Batch Normalization layers remain in inference mode, preventing running statistics distortion on single-sample inputs. The $j$-th stochastic forward pass is computed as:
 \begin{equation}
 \mathcal{P}^{(j)} = \text{Model}(X, \text{dropout=active, BN=inference}) \quad \forall j \in \{1,\dots,N\}
 \end{equation}
@@ -116,7 +116,7 @@ If the mean confidence $\mu_{c^*} \ge 0.98$ and the variance $\sigma^2_{c^*} \le
 \section{Experimental Evaluation}
 
 \subsection{Dataset and Setup}
-The model was trained on a dataset of 541 patch images across 8 classes (clean, crack, edge\_defect, open, other, scratch, short, and spot), sampled from the NEU Surface Defect Database~\cite{song2020neu} --- a metal surface defect benchmark --- via class relabeling to approximate wafer defect taxonomies. We acknowledge that this adaptation introduces a domain gap relative to actual fab wafer imaging; production deployment would require retraining on fab-specific wafer data. Data was split 75/25 train/test (stratified by class). No separate validation set was used; thresholds were tuned on the training set to avoid leakage. The test dataset consists of 150 images. Benchmarks were executed on an NVIDIA GeForce RTX 4050 Laptop GPU (6GB VRAM, Windows 11, CUDA 12.6, TensorRT 10.3~\cite{tensorrt2023}, onnxruntime-gpu 1.19.2~\cite{onnxruntime}).
+The model was trained on a dataset of 541 patch images across 8 classes (clean, crack, edge\_defect, open, other, scratch, short, and spot), sampled from the NEU Surface Defect Database~\cite{song2020neu} --- a metal surface defect benchmark --- via class relabeling to approximate wafer defect taxonomies. We acknowledge that this adaptation introduces a domain gap relative to actual fab wafer imaging; production deployment would require retraining on fab-specific wafer data. Data was split 75/25 train/test (stratified by class). Thresholds were selected empirically on the training set; the absence of a held-out validation set means reported threshold-dependent metrics (Table V) may be optimistically biased. The test dataset consists of 150 images. Benchmarks were executed on an NVIDIA GeForce RTX 4050 Laptop GPU (6GB VRAM, Windows 11, CUDA 12.6, TensorRT 10.3~\cite{tensorrt2023}, onnxruntime-gpu 1.19.2~\cite{onnxruntime}).
 
 \subsection{Inference Latency Results}
 We compared the inference latency of the exported ONNX model. TensorRT compiling with FP16 precision achieved significant speedup, as shown in Table~\ref{tab:inference_latency}. Latency statistics were computed over $N=500$ runs after 50 warm-up iterations.
@@ -166,7 +166,7 @@ Throughput & 120.5 fps & 333.3 fps \\
 OPTI-FAB reduces mean pipeline latency by 63.9\% (from 8.30~ms to 3.00~ms). The sequential MC Dropout path takes 24.8~ms (Table~\ref{tab:pipeline_latency}) under `tf.function` compilation.
 
 \subsection{Classification Performance}
-OPTI-FAB achieved an overall baseline accuracy of \textbf{90\%} on full-frame test images. The per-class evaluation is detailed in Table~\ref{tab:classification_performance}.
+OPTI-FAB achieved an overall baseline accuracy of \textbf{91\%} on full-frame test images. The per-class evaluation is detailed in Table~\ref{tab:classification_performance}.
 
 \begin{table}[h]
 \centering
@@ -178,16 +178,16 @@ OPTI-FAB achieved an overall baseline accuracy of \textbf{90\%} on full-frame te
 \toprule
 \textbf{Defect Class} & \textbf{Precision} & \textbf{Recall} & \textbf{F1-Score} & \textbf{Support} \\
 \midrule
-clean & 0.95 & 1.00 & 0.98 & 20 \\
+clean & 0.91 & 1.00 & 0.95 & 20 \\
 crack & 0.95 & 1.00 & 0.98 & 20 \\
 edge\_defect & 0.67 & 1.00 & 0.80 & 20 \\
 open & 1.00 & 1.00 & 1.00 & 15 \\
 other & 1.00 & 0.50 & 0.67 & 20 \\
-scratch & 0.87 & 1.00 & 0.93 & 20 \\
+scratch & 1.00 & 1.00 & 1.00 & 20 \\
 short & 1.00 & 1.00 & 1.00 & 15 \\
-spot & 1.00 & 0.75 & 0.86 & 20 \\
+spot & 1.00 & 0.85 & 0.92 & 20 \\
 \midrule
-\textbf{Accuracy} & & & \textbf{0.90} & \textbf{150} \\
+\textbf{Accuracy} & & & \textbf{0.91} & \textbf{150} \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -211,7 +211,7 @@ The lower recall on \textit{other} is due to confusion with the \textit{edge\_de
 \textbf{other}       & 0 & 0 & 10 & 0 & 10 & 0 & 0 & 0 \\
 \textbf{scratch}     & 0 & 0 & 0 & 0 & 0 & 20 & 0 & 0 \\
 \textbf{short}       & 0 & 0 & 0 & 0 & 0 & 0 & 15 & 0 \\
-\textbf{spot}        & 2 & 2 & 0 & 0 & 0 & 0 & 0 & 16 \\
+\textbf{spot}        & 2 & 1 & 0 & 0 & 0 & 0 & 0 & 17 \\
 \bottomrule
 \end{tabular}
 \end{table}
