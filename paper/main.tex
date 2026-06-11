@@ -107,7 +107,7 @@ For borderline cases where the fast path output triggers a deferral, the system 
 \begin{equation}
 \mathcal{P}^{(j)} = \text{Model}(X, \text{dropout=active, BN=inference}) \quad \forall j \in \{1,\dots,N\}
 \end{equation}
-In TensorRT/Keras, this is implemented by calling the model with \texttt{training=True} on Dropout layers and \texttt{training=False} on Batch Normalization layers via layer-level overrides rather than a single global \texttt{training} flag. We compute the mean prediction $\mu$ and prediction variance $\sigma^2$ across the $N$ stochastic runs:
+In Keras, this is implemented by calling the model with \texttt{training=True} on Dropout layers and \texttt{training=False} on Batch Normalization layers via layer-level overrides rather than a single global \texttt{training} flag. We compute the mean prediction $\mu$ and prediction variance $\sigma^2$ across the $N$ stochastic runs:
 \begin{equation}
 \mu = \frac{1}{N} \sum_{j=1}^{N} \mathcal{P}^{(j)}, \quad \sigma^2 = \frac{1}{N} \sum_{j=1}^{N} (\mathcal{P}^{(j)} - \mu)^2
 \end{equation}
@@ -116,7 +116,7 @@ If the mean confidence $\mu_{c^*} \ge 0.98$ and the variance $\sigma^2_{c^*} \le
 \section{Experimental Evaluation}
 
 \subsection{Dataset and Setup}
-The model was trained on a dataset of 541 patch images across 8 classes (clean, crack, edge\_defect, open, other, scratch, short, and spot), sampled from the NEU Surface Defect Database~\cite{song2020neu} --- a metal surface defect benchmark --- via class relabeling to approximate wafer defect taxonomies. We acknowledge that this adaptation introduces a domain gap relative to actual fab wafer imaging; production deployment would require retraining on fab-specific wafer data. Data was split 75/25 train/test (stratified by class). Thresholds were selected empirically on the training set; the absence of a held-out validation set means reported threshold-dependent metrics (Table V) may be optimistically biased. The test dataset consists of 150 images. Benchmarks were executed on an NVIDIA GeForce RTX 4050 Laptop GPU (6GB VRAM, Windows 11, CUDA 12.6, TensorRT 10.3~\cite{tensorrt2023}, onnxruntime-gpu 1.19.2~\cite{onnxruntime}).
+The model was trained on a dataset of 541 patch images across 8 classes (clean, crack, edge\_defect, open, other, scratch, short, and spot), sampled from the NEU Surface Defect Database~\cite{song2020neu} --- a metal surface defect benchmark --- via class relabeling to approximate wafer defect taxonomies. We acknowledge that this adaptation introduces a domain gap relative to actual fab wafer imaging; production deployment would require retraining on fab-specific wafer data. Data was split 75/25 train/test (stratified by class). Thresholds were selected empirically on the training set; the absence of a held-out validation set means thresholds may therefore be optimistically biased toward the training distribution. The test dataset consists of 150 images. Benchmarks were executed on an NVIDIA GeForce RTX 4050 Laptop GPU (6GB VRAM, Windows 11, CUDA 12.6, TensorRT 10.3~\cite{tensorrt2023}, onnxruntime-gpu 1.19.2~\cite{onnxruntime}).
 
 \subsection{Inference Latency Results}
 We compared the inference latency of the exported ONNX model. TensorRT compiling with FP16 precision achieved significant speedup, as shown in Table~\ref{tab:inference_latency}. Latency statistics were computed over $N=500$ runs after 50 warm-up iterations.
