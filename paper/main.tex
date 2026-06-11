@@ -123,11 +123,13 @@ We compared the inference latency of the exported ONNX model. TensorRT compiling
 
 \begin{table}[h]
 \centering
-\caption{Inference Latency Across Execution Providers}
+\caption{Inference Latency Across Execution Providers (Times in ms)}
 \label{tab:inference_latency}
+\setlength{\tabcolsep}{4pt}
+\footnotesize
 \begin{tabular}{lccccc}
 \toprule
-\textbf{Provider} & \textbf{Mean (ms)} & \textbf{Median (ms)} & \textbf{P95 (ms)} & \textbf{P99 (ms)} & \textbf{FPS} \\
+\textbf{Provider} & \textbf{Mean} & \textbf{Med.} & \textbf{P95} & \textbf{P99} & \textbf{FPS} \\
 \midrule
 CPU Baseline & 2.64 $\pm$ 0.12 & 2.46 & 3.12 & 3.72 & 379.1 \\
 CUDA & 2.74 $\pm$ 0.45 & 2.33 & 4.01 & 6.38 & 364.8 \\
@@ -145,9 +147,11 @@ We profiled the entire pipeline latency (from image availability to decision out
 \centering
 \caption{End-to-End Pipeline Latency Comparison}
 \label{tab:pipeline_latency}
+\setlength{\tabcolsep}{6pt}
+\footnotesize
 \begin{tabular}{lrr}
 \toprule
-\textbf{Metric} & \textbf{File-Based Pipeline} & \textbf{OPTI-FAB Stream} \\
+\textbf{Metric} & \textbf{File-Based} & \textbf{OPTI-FAB} \\
 \midrule
 Mean Latency & 8.30 $\pm$ 0.85 ms & 3.00 $\pm$ 0.32 ms \\
 Median Latency & 7.74 ms & 2.47 ms \\
@@ -168,6 +172,8 @@ OPTI-FAB achieved an overall baseline accuracy of \textbf{90\%} on full-frame te
 \centering
 \caption{Per-Class Evaluation Metrics}
 \label{tab:classification_performance}
+\setlength{\tabcolsep}{6pt}
+\footnotesize
 \begin{tabular}{lcccc}
 \toprule
 \textbf{Defect Class} & \textbf{Precision} & \textbf{Recall} & \textbf{F1-Score} & \textbf{Support} \\
@@ -192,9 +198,11 @@ The lower recall on \textit{other} is due to confusion with the \textit{edge\_de
 \centering
 \caption{Baseline Full-Frame Confusion Matrix}
 \label{tab:confusion_matrix}
+\setlength{\tabcolsep}{3pt}
+\footnotesize
 \begin{tabular}{lcccccccc}
 \toprule
- & \textbf{clean} & \textbf{crk} & \textbf{edg} & \textbf{opn} & \textbf{oth} & \textbf{scr} & \textbf{sht} & \textbf{spt} \\
+ & \textbf{cln} & \textbf{crk} & \textbf{edg} & \textbf{opn} & \textbf{oth} & \textbf{scr} & \textbf{sht} & \textbf{spt} \\
 \midrule
 \textbf{clean}       & 20 & 0 & 0 & 0 & 0 & 0 & 0 & 0 \\
 \textbf{crack}       & 0 & 20 & 0 & 0 & 0 & 0 & 0 & 0 \\
@@ -215,9 +223,11 @@ On the 150-image test set, 92.0\% of frames triggered an early exit (mean scan c
 \centering
 \caption{Ablation of Confidence and Entropy Thresholds}
 \label{tab:ablation}
+\setlength{\tabcolsep}{4pt}
+\footnotesize
 \begin{tabular}{ccccc}
 \toprule
-\textbf{Conf Thresh} & \textbf{Ent Thresh} & \textbf{Accuracy} & \textbf{Early Exit Rate} & \textbf{Mean Scan} \\
+\textbf{Conf.} & \textbf{Entropy} & \textbf{Accuracy} & \textbf{Exit Rate} & \textbf{Mean Scan} \\
 \midrule
 0.85 & 0.35 & 47.3\% & 100.0\% & 53.7\% \\
 0.90 & 0.20 & 48.7\% & 100.0\% & 54.3\% \\
